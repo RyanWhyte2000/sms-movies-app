@@ -1,0 +1,93 @@
+# Azure DevOps Services CI. Deployment requires a configured target and service connection.
+name: $(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+# For Azure Repos Git, configure a required Build Validation branch policy instead.
+# YAML PR triggers apply to GitHub and Bitbucket Cloud repositories.
+pr:
+  autoCancel: true
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  nodeVersion: '22.x'
+  npm_config_cache: $(Pipeline.Workspace)/.npm
+  NEXT_TELEMETRY_DISABLED: '1'
+  CI: 'true'
+
+jobs:
+  - job: ValidateAndBuild
+    displayName: Validate and build movie app
+    timeoutInMinutes: 20
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: false
+
+      - task: UseNode@1
+        displayName: Use Node.js $(nodeVersion)
+        inputs:
+          version: $(nodeVersion)
+
+      - task: Cache@2
+        displayName: Cache npm downloads
+        inputs:
+          key: 'npm | "$(Agent.OS)" | "$(nodeVersion)" | package-lock.json'
+          restoreKeys: |
+            npm | "$(Agent.OS)" | "$(nodeVersion)"
+          path: $(npm_config_cache)
+
+      # Always run npm ci, even on a cache hit; node_modules is not cached.
+      - script: npm ci --prefer-offline --no-audit --no-fund
+        displayName: Install locked dependencies
+
+      - script: npm run lint -- --max-warnings=0
+        displayName: Check ESLint
+
+      - script: |
+          set -euo pipefail
+          npx --no-install next typegen
+          npx --no-install tsc --noEmit
+        displayName: Generate route types and check TypeScript
+
+      # TODO: Add mandatory tests, coverage >= 80%, and test/coverage report
+      # publication when the test suite is implemented. No test gate is claimed yet.
+
+      # Use the bundler already verified for this project.
+      - script: npm run build -- --webpack
+        displayName: Build production application
+
+      - task: CopyFiles@2
+        displayName: Stage build output
+        inputs:
+          SourceFolder: $(Build.SourcesDirectory)
+          Contents: |
+            .next/**
+            !.next/cache/**
+            !.next/dev/**
+            public/**
+            package.json
+            package-lock.json
+            next.config.ts
+            tsconfig.json
+            next-env.d.ts
+          TargetFolder: $(Build.ArtifactStagingDirectory)/movie-app
+          CleanTargetFolder: true
+
+      # Build output only: runtime dependencies must be installed before npm start.
+      # This does not deploy the application or include credentials/environment files.
+      - task: PublishPipelineArtifact@1
+        displayName: Publish successful build
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/movie-app
+          artifact: movie-app
+          publishLocation: pipeline
