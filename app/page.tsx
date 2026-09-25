@@ -376,29 +376,49 @@ export default function Home() {
       return next;
     });
   }
+  async function finishAuthentication(account: User) {
+    setUser(account);
+    setPassword("");
+    setAuthError("");
+    setAuthMessage("");
+    setPanel(null);
+
+    const [ratingsResult, genresResult] = await Promise.allSettled([
+      getRatings(),
+      getGenres(),
+    ]);
+    if (ratingsResult.status === "fulfilled") {
+      setRatings(Object.fromEntries(ratingsResult.value.content.map((rating) => [rating.movieId, rating.score])));
+    }
+    if (genresResult.status === "fulfilled") {
+      setGenres(genresResult.value);
+    }
+  }
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
     try {
       const account = await login(email, password);
-      const [page, availableGenres] = await Promise.all([
-        getRatings(),
-        getGenres(),
-      ]);
-      setUser(account); setPassword("");
-      setGenres(availableGenres);
-      setRatings(Object.fromEntries(page.content.map((rating) => [rating.movieId, rating.score])));
-      setPanel(null);
+      await finishAuthentication(account);
     } catch (cause) { setAuthError(formatAuthError(cause, "Sign in failed.")); }
     finally { setAuthPending(false); }
   }
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
+    let accountCreated = false;
     try {
       await register(email, password, displayName);
-      setAuthMode("login");
-      setPassword("");
-      setAuthMessage("Account created. Sign in to continue.");
-    } catch (cause) { setAuthError(formatAuthError(cause, "Registration failed.")); }
+      accountCreated = true;
+      const account = await login(email, password);
+      await finishAuthentication(account);
+    } catch (cause) {
+      const message = formatAuthError(cause, accountCreated ? "Automatic sign in failed." : "Registration failed.");
+      if (accountCreated) {
+        setAuthMode("login");
+        setAuthError(`Your account was created, but automatic sign in failed. ${message}`);
+      } else {
+        setAuthError(message);
+      }
+    }
     finally { setAuthPending(false); }
   }
   async function signOut() {
@@ -553,7 +573,7 @@ export default function Home() {
                   <button type="button" role="tab" aria-selected={authMode === "login"} onClick={() => { setAuthMode("login"); setAuthError(""); setAuthMessage(""); }}>Sign in</button>
                   <button type="button" role="tab" aria-selected={authMode === "register"} onClick={() => { setAuthMode("register"); setAuthError(""); setAuthMessage(""); }}>Register</button>
                 </div>
-                <p>{authMode === "login" ? "Browse and search the catalogue as a guest. Sign in to add personal ratings." : "Create an account. You’ll sign in after registration."}</p>
+                <p>{authMode === "login" ? "Browse and search the catalogue as a guest. Sign in to add personal ratings." : "Create an account and you’ll be signed in automatically."}</p>
                 {authMode === "register" && <label>Display name<input type="text" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={120} required /></label>}
                 <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
                 <label>Password<input type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={authMode === "register" ? 12 : undefined} maxLength={128} required /></label>
