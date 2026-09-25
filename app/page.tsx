@@ -1,160 +1,68 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 
 import Image from "next/image";
 import Link from "next/link";
+import {
+  ApiError,
+  ApiMovie,
+  Genre,
+  User,
+  getGenres,
+  getMe,
+  getMovie,
+  getMovies,
+  getRatings,
+  isAdmin,
+  login,
+  logout,
+  register,
+  removeRating,
+  saveRating,
+} from "@/lib/api";
 
-function subscribeWatchlist(callback: () => void) {
-  window.addEventListener("storage", callback);
-  window.addEventListener("watchlist-change", callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener("watchlist-change", callback);
-  };
-}
-function getWatchlist() {
-  try {
-    return localStorage.getItem("movie-gather-watchlist") || "[]";
-  } catch {
-    return "[]";
-  }
-}
+type Movie = ApiMovie;
 
-type Movie = {
-  id: string;
-  title: string;
-  genre: string;
-  year: number;
-  rating: string;
-  type: "Movie" | "Series";
-  description: string;
+const posterByTitle: Record<string, string> = {
+  pluribus: "pluribus",
+  "tron: ares": "tron",
+  "people we meet on vacation": "vacation",
+  "his & hers": "his-hers",
+  "avatar: fire and ash": "avatar",
+  xxx: "xxx",
+  "greenland 2": "greenland",
+  "the housemaid": "housemaid",
+  "tell me lies": "tell-me-lies",
+  fallout: "fallout",
+  "dune: part two": "dune",
 };
-const movies: Movie[] = [
-  {
-    id: "pluribus",
-    title: "Pluribus",
-    genre: "Sci fi",
-    year: 2025,
-    rating: "8.5",
-    type: "Series",
-    description:
-      "The most miserable person on Earth must save the world from happiness. A mysterious and unexpected story from the creator of Breaking Bad.",
-  },
-  {
-    id: "tron",
-    title: "Tron: Ares",
-    genre: "Sci fi",
-    year: 2025,
-    rating: "6.8",
-    type: "Movie",
-    description:
-      "A highly sophisticated program crosses from the digital world into the real world on a dangerous mission.",
-  },
-  {
-    id: "vacation",
-    title: "People We Meet on Vacation",
-    genre: "Comedy",
-    year: 2026,
-    rating: "7.2",
-    type: "Movie",
-    description:
-      "Two best friends. Ten summer trips. One last chance to discover whether they might be something more.",
-  },
-  {
-    id: "his-hers",
-    title: "His & Hers",
-    genre: "Drama",
-    year: 2026,
-    rating: "7.4",
-    type: "Series",
-    description:
-      "An estranged couple, a detective and a journalist, compete to solve a murder in which each believes the other is a prime suspect.",
-  },
-  {
-    id: "avatar",
-    title: "Avatar: Fire and Ash",
-    genre: "Fantasy",
-    year: 2025,
-    rating: "7.6",
-    type: "Movie",
-    description:
-      "Return to Pandora as the Sully family encounters a new Na’vi clan and faces a challenge that will change their world forever.",
-  },
-  {
-    id: "xxx",
-    title: "XXX",
-    genre: "Action",
-    year: 2002,
-    rating: "5.8",
-    type: "Movie",
-    description:
-      "An extreme-sports athlete is recruited for an extraordinary undercover mission. The rules are about to change.",
-  },
-  {
-    id: "greenland",
-    title: "Greenland 2",
-    genre: "Action",
-    year: 2026,
-    rating: "6.1",
-    type: "Movie",
-    description:
-      "The Garrity family must leave the safety of their bunker and cross a shattered world in search of a new home.",
-  },
-  {
-    id: "housemaid",
-    title: "The Housemaid",
-    genre: "Drama",
-    year: 2025,
-    rating: "7.0",
-    type: "Movie",
-    description:
-      "A fresh start in a wealthy household becomes a dangerous game of secrets, deception, and survival.",
-  },
-  {
-    id: "tell-me-lies",
-    title: "Tell Me Lies",
-    genre: "Drama",
-    year: 2022,
-    rating: "6.7",
-    type: "Series",
-    description:
-      "A tumultuous relationship unfolds over eight years, drawing everyone around it into a web of secrets.",
-  },
-  {
-    id: "fallout",
-    title: "Fallout",
-    genre: "Sci fi",
-    year: 2024,
-    rating: "8.3",
-    type: "Series",
-    description:
-      "A sheltered vault dweller ventures into a beautifully strange and dangerously unpredictable post-apocalyptic world.",
-  },
-  {
-    id: "dune",
-    title: "Dune: Part Two",
-    genre: "Sci fi",
-    year: 2024,
-    rating: "8.5",
-    type: "Movie",
-    description:
-      "Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family. A choice between love and the fate of the universe awaits.",
-  },
-];
-const genres = [
-  { name: "Action", icon: "swords" },
-  { name: "Comedy", icon: "comedy" },
-  { name: "Historical", icon: "building" },
-  { name: "Drama", icon: "drama" },
-  { name: "Sci fi", icon: "scifi" },
-  { name: "Fantasy", icon: "magic" },
-  { name: "Music", icon: "music" },
-  { name: "Documentary", icon: "film" },
-];
+function poster(movie: Movie, hero = false) {
+  const slug = posterByTitle[movie.title.toLowerCase()] ?? "dune";
+  return `/images/${hero && slug === "dune" ? "dune-hero" : slug}.jpg`;
+}
+function year(movie: Movie) {
+  return movie.releaseDate ? new Date(`${movie.releaseDate}T00:00:00`).getUTCFullYear() : "—";
+}
+function displayRating(movie: Movie) {
+  return movie.externalRatings?.length ? movie.externalRatings : null;
+}
+const genreIcon: Record<string, string> = {
+  action: "swords", comedy: "comedy", historical: "building", drama: "drama",
+  "sci fi": "scifi", "science fiction": "scifi", fantasy: "magic", music: "music",
+  documentary: "film",
+};
+function formatAuthError(cause: unknown, fallback: string) {
+  if (!(cause instanceof Error)) return fallback;
+  if (cause instanceof ApiError && cause.errors) {
+    const details = Object.values(cause.errors).join(" ");
+    if (details) return details;
+  }
+  return cause.message;
+}
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
-    play: <path d="m9 5 11 7-11 7Z" />,
     star: (
       <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" />
     ),
@@ -250,24 +158,75 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
     </svg>
   );
 }
-function Stats({ rating, viewers }: { rating: string; viewers?: string }) {
+function Stats({ movie }: { movie: Movie }) {
+  const externalRatings = displayRating(movie);
   return (
-    <div className="stats">
-      {viewers && (
-        <span>
-          <Icon name="person" size={14} />
-          {viewers}
+    <div className="stats" aria-label="Third-party ratings">
+      {externalRatings ? externalRatings.map((rating) => (
+        <span key={`${rating.source}-${rating.fetchedAt}`}>
+          <Icon name="star" size={15} />
+          {rating.score}/{rating.scaleMax} {rating.source}
         </span>
-      )}
-      <span>
-        <Icon name="star" size={15} />
-        {rating} IMDb
-      </span>
-      <span>
-        <Icon name="chat" size={14} />
-        18
-      </span>
+      )) : <span>Not rated by third-party sources</span>}
     </div>
+  );
+}
+
+function RatingControl({
+  movie,
+  rating,
+  onRate,
+}: {
+  movie: Movie;
+  rating?: number;
+  onRate: (id: string, rating: number | null) => Promise<void>;
+}) {
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function rate(value: number | null) {
+    setSaving(true);
+    setError("");
+    try {
+      await onRate(movie.id, value);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Your rating could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <section className="rating-control" aria-label={`Rate ${movie.title}`}>
+      <h3>Your rating</h3>
+      <div
+        className="rating-options"
+        role="group"
+        aria-label="Choose a score out of 5"
+      >
+        {Array.from({ length: 5 }, (_, index) => index + 1).map((score) => (
+          <button
+            key={score}
+            aria-label={`Rate ${score} out of 5`}
+            aria-pressed={rating === score}
+            disabled={saving}
+            onClick={() => rate(score)}
+          >
+            {score}
+          </button>
+        ))}
+      </div>
+      <p className="rating-status" role="status">
+        {rating
+          ? `You rated this ${rating}/5. Select another score to update it.`
+          : "Select a score from 1 to 5."}
+      </p>
+      {rating && (
+        <button className="remove-rating" disabled={saving} onClick={() => rate(null)}>
+          Remove my rating
+        </button>
+      )}
+      {error && <p role="alert">{error}</p>}
+      <small className="rating-note">Your rating is saved to your account.</small>
+    </section>
   );
 }
 function MovieRow({
@@ -307,23 +266,24 @@ function MovieRow({
         {items.map((movie) => (
           <button
             className="movie-card"
+            aria-label={`Rate ${movie.title}`}
             key={movie.id}
             onClick={() => onSelect(movie)}
           >
             <div className="poster">
               <Image
-                src={`/images/${movie.id}.jpg`}
+                src={poster(movie)}
                 alt={`${movie.title} poster`}
                 width={300}
                 height={450}
                 sizes="(max-width: 540px) 30vw, (max-width: 850px) 22vw, 160px"
               />
-              <span className="poster-play">
-                <Icon name="play" size={28} />
+              <span className="poster-rate">
+                <Icon name="star" size={28} />
               </span>
-              <span className="poster-type">{movie.type}</span>
+              <span className="poster-type">Movie</span>
             </div>
-            <Stats rating={movie.rating} />
+            <Stats movie={movie} />
             <h3>{movie.title}</h3>
           </button>
         ))}
@@ -333,63 +293,169 @@ function MovieRow({
 }
 export default function Home() {
   const [nav, setNav] = useState("Board");
-  const [genre, setGenre] = useState("");
+  const [genre, setGenre] = useState<Genre | null>(null);
   const [query, setQuery] = useState("");
-  const [slide, setSlide] = useState(1);
+  const [castQuery, setCastQuery] = useState("");
+  const [directorQuery, setDirectorQuery] = useState("");
+  const [slide, setSlide] = useState(0);
   const [selected, setSelected] = useState<Movie | null>(null);
   const [panel, setPanel] = useState<string | null>(null);
-  const savedJson = useSyncExternalStore(
-    subscribeWatchlist,
-    getWatchlist,
-    () => "[]",
-  );
-  let saved: string[] = [];
-  try {
-    const value: unknown = JSON.parse(savedJson);
-    if (Array.isArray(value))
-      saved = value.filter((id): id is string => typeof id === "string");
-  } catch {}
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authError, setAuthError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [authPending, setAuthPending] = useState(false);
+  const [shareMessage, setShareMessage] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
+  const admin = isAdmin(user);
+
+  useEffect(() => {
+    void getGenres().then(setGenres).catch(() => setGenres([]));
+    void getMe()
+      .then(async (account) => {
+        setUser(account);
+        const page = await getRatings();
+        setRatings(Object.fromEntries(page.content.map((rating) => [rating.movieId, rating.score])));
+      })
+      .catch((cause) => {
+        // A missing session means guest mode, not a catalogue failure. Keep
+        // account errors in the account UI so public browsing stays available.
+        if (!(cause instanceof ApiError) || cause.status !== 401) {
+          setAuthError(cause instanceof Error ? cause.message : "Account data could not be loaded.");
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      getMovies({
+        q: query.trim() || undefined,
+        cast: castQuery.trim() || undefined,
+        director: directorQuery.trim() || undefined,
+        genreId: genre?.id,
+      })
+        .then((page) => {
+          if (!controller.signal.aborted) {
+            setMovies(page.content);
+            setApiError("");
+            setSlide(0);
+          }
+        })
+        .catch((cause) => {
+          if (!controller.signal.aborted) {
+            setMovies([]);
+            setApiError(cause instanceof Error ? cause.message : "Movies could not be loaded.");
+          }
+        })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, query || castQuery || directorQuery ? 300 : 0);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [query, castQuery, directorQuery, genre]);
 
   useEffect(() => {
     if (selected) dialog.current?.showModal();
     else dialog.current?.close();
   }, [selected]);
-  function toggleSave(id: string) {
-    const next = saved.includes(id)
-      ? saved.filter((item) => item !== id)
-      : [...saved, id];
-    localStorage.setItem("movie-gather-watchlist", JSON.stringify(next));
-    window.dispatchEvent(new Event("watchlist-change"));
+  async function rateMovie(id: string, score: number | null) {
+    if (!user) throw new Error("Sign in to submit a personal rating.");
+    if (score === null) await removeRating(id);
+    else await saveRating(id, score);
+    setRatings((current) => {
+      const next = { ...current };
+      if (score === null) delete next[id]; else next[id] = score;
+      return next;
+    });
   }
-  const featured = [movies[4], movies[10], movies[1], movies[9]][slide];
+  async function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
+    try {
+      const account = await login(email, password);
+      const [page, availableGenres] = await Promise.all([
+        getRatings(),
+        getGenres(),
+      ]);
+      setUser(account); setPassword("");
+      setGenres(availableGenres);
+      setRatings(Object.fromEntries(page.content.map((rating) => [rating.movieId, rating.score])));
+      setPanel(null);
+    } catch (cause) { setAuthError(formatAuthError(cause, "Sign in failed.")); }
+    finally { setAuthPending(false); }
+  }
+  async function createAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
+    try {
+      await register(email, password, displayName);
+      setAuthMode("login");
+      setPassword("");
+      setAuthMessage("Account created. Sign in to continue.");
+    } catch (cause) { setAuthError(formatAuthError(cause, "Registration failed.")); }
+    finally { setAuthPending(false); }
+  }
+  async function signOut() {
+    try { await logout(); setUser(null); setRatings({}); setPanel(null); }
+    catch (cause) { setAuthError(cause instanceof Error ? cause.message : "Sign out failed."); }
+  }
+  async function shareCollection() {
+    if (!isAdmin(user)) {
+      setShareMessage("Only an admin can share the personal collection.");
+      return;
+    }
+    const entries = movies
+      .filter((movie) => ratings[movie.id] !== undefined)
+      .map((movie) => `${movie.title} — ${ratings[movie.id]}/5`);
+    if (!entries.length) {
+      setShareMessage("Add a rating before sharing the collection.");
+      return;
+    }
+    const text = `My SMS Movies collection:\n${entries.join("\n")}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "My SMS Movies collection", text });
+        setShareMessage("Collection shared.");
+      } else {
+        await navigator.clipboard.writeText(text);
+        setShareMessage("Collection copied to the clipboard.");
+      }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      setShareMessage("The collection could not be shared.");
+    }
+  }
+  async function selectMovie(movie: Movie) {
+    try { setSelected(await getMovie(movie.id)); }
+    catch { setSelected(movie); }
+  }
+  const featured = movies.length ? movies[slide % Math.min(movies.length, 4)] : null;
   const filtered = movies.filter(
     (movie) =>
-      (!genre || movie.genre === genre) &&
-      movie.title.toLowerCase().includes(query.toLowerCase()) &&
-      (nav !== "Movies" || movie.type === "Movie") &&
-      (nav !== "Series" || movie.type === "Series") &&
-      (nav !== "Watchlist" || saved.includes(movie.id)),
+      (nav !== "Ratings" || ratings[movie.id] !== undefined),
   );
-  const isFiltered = !!genre || !!query || nav !== "Board";
+  const isFiltered = !!genre || !!query || !!castQuery || !!directorQuery || nav !== "Board";
   return (
     <div className="app-shell">
       <header className="header">
-        <Link className="logo" href="/" aria-label="Movie Gather home">
-          <span>
-            M<span className="logo-moon" />
-            VIE
-          </span>
-          <small>GATHER</small>
+        <Link className="logo" href="/" aria-label="SMS Movies home">
+          <span>SMS</span>
+          <small>MOVIES</small>
         </Link>
         <nav aria-label="Main navigation">
-          {["Board", "New", "Movies", "Series"].map((item) => (
+          {["Board", "New"].map((item) => (
             <button
               key={item}
               className={nav === item ? "nav-active" : ""}
               onClick={() => {
                 setNav(item);
-                setGenre("");
+                setGenre(null);
               }}
             >
               {item === "Board" && <Icon name="flame" size={17} />}
@@ -400,10 +466,11 @@ export default function Home() {
         <div className="header-tools">
           <label className="search">
             <input
+              type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search"
-              aria-label="Search movies and series"
+              placeholder="Search titles"
+              aria-label="Search by movie title"
             />
             {query ? (
               <button aria-label="Clear search" onClick={() => setQuery("")}>
@@ -435,9 +502,9 @@ export default function Home() {
             onClick={() => setPanel(panel === "profile" ? null : "profile")}
             aria-expanded={panel === "profile"}
           >
-            <span className="avatar">LP</span>
+            <span className="avatar">{user ? user.displayName.slice(0, 2).toUpperCase() : "?"}</span>
             <span className="profile-text">
-              Lee Phang<small>Premium</small>
+              {user?.displayName ?? "Guest"}<small>{user ? user.email : "Sign in"}</small>
             </span>
             <span className="profile-chevron">
               <Icon name="down" size={16} />
@@ -458,20 +525,43 @@ export default function Home() {
                 <Icon name="close" size={17} />
               </button>
             </div>
-            {panel === "profile" ? (
+            {panel === "profile" && user ? (
               <>
-                <p>Good evening, Lee. Make it a movie night.</p>
-                <button
-                  className="watchlist-link"
-                  onClick={() => {
-                    setNav("Watchlist");
-                    setPanel(null);
-                  }}
-                >
-                  My watchlist <span>{saved.length}</span>
-                </button>
-                <div className="plan-label">✦ Premium member</div>
+                <p>Welcome back, {user.displayName}. {admin ? "You can maintain and share the personal collection." : "Collection management is restricted to administrators."}</p>
+                {admin && (
+                  <>
+                    <button
+                      className="ratings-link"
+                      onClick={() => {
+                        setNav("Ratings");
+                        setPanel(null);
+                      }}
+                    >
+                      Personal collection <span>{Object.keys(ratings).length}</span>
+                    </button>
+                    <button className="ratings-link" onClick={() => void shareCollection()}>
+                      Share collection
+                    </button>
+                    {shareMessage && <p role="status">{shareMessage}</p>}
+                  </>
+                )}
+                <button className="remove-rating" onClick={() => void signOut()}>Sign out</button>
               </>
+            ) : panel === "profile" ? (
+              <form onSubmit={authMode === "login" ? signIn : createAccount}>
+                <div className="auth-tabs" role="tablist" aria-label="Account access">
+                  <button type="button" role="tab" aria-selected={authMode === "login"} onClick={() => { setAuthMode("login"); setAuthError(""); setAuthMessage(""); }}>Sign in</button>
+                  <button type="button" role="tab" aria-selected={authMode === "register"} onClick={() => { setAuthMode("register"); setAuthError(""); setAuthMessage(""); }}>Register</button>
+                </div>
+                <p>{authMode === "login" ? "Browse and search the catalogue as a guest. Sign in to add personal ratings." : "Create an account. You’ll sign in after registration."}</p>
+                {authMode === "register" && <label>Display name<input type="text" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={120} required /></label>}
+                <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+                <label>Password<input type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={authMode === "register" ? 12 : undefined} maxLength={128} required /></label>
+                {authMode === "register" && <small>Use 12–128 characters.</small>}
+                <button className="auth-submit" type="submit" disabled={authPending}>{authPending ? "Please wait…" : authMode === "login" ? "Sign in" : "Create account"}</button>
+                {authMessage && <p className="auth-success" role="status">{authMessage}</p>}
+                {authError && <p className="auth-error" role="alert">{authError}</p>}
+              </form>
             ) : (
               <p>
                 {panel === "messages"
@@ -483,9 +573,12 @@ export default function Home() {
         )}
       </header>
       <main>
+        {apiError && <div className="filter-summary" role="alert"><span>{apiError}<small>{apiError === "Sign in to continue." ? "Open the profile menu to sign in." : "Check the API origin and backend availability."}</small></span></div>}
+        {loading && <p className="filter-summary" role="status">Loading catalogue…</p>}
+        {featured && (
         <div className="spotlight-layout">
           <section
-            className={`hero hero-${featured.id}`}
+            className="hero"
             aria-label="Featured movie"
           >
             <Image
@@ -493,18 +586,14 @@ export default function Home() {
               height={700}
               preload
               className="hero-image"
-              src={`/images/${featured.id === "dune" ? "dune-hero" : featured.id}.jpg`}
-              alt={
-                featured.title === "Dune: Part Two"
-                  ? "Lady Jessica on Arrakis"
-                  : featured.title
-              }
+              src={poster(featured, true)}
+              alt={featured.title}
             />
             <div className="hero-shade" />
             <div className="hero-dots">
-              {[0, 1, 2, 3].map((index) => (
+              {movies.slice(0, 4).map((movie, index) => (
                 <button
-                  key={index}
+                  key={movie.id}
                   className={slide === index ? "active" : ""}
                   aria-label={`Show featured movie ${index + 1}`}
                   aria-pressed={slide === index}
@@ -513,60 +602,49 @@ export default function Home() {
               ))}
             </div>
             <div className="hero-copy">
-              <span className="hero-year">{featured.year}</span>
+              <span className="hero-year">{year(featured)}</span>
               <h1>{featured.title}</h1>
-              <Stats rating={featured.rating} viewers="243" />
+              <Stats movie={featured} />
             </div>
             <button
-              className="hero-play"
-              aria-label={`Watch ${featured.title}`}
-              onClick={() => setSelected(featured)}
+              className="hero-rate"
+              aria-label={`Rate ${featured.title}`}
+              onClick={() => void selectMovie(featured)}
             >
-              <Icon name="play" size={49} />
+              <Icon name="star" size={30} />
+              <span>Rate it</span>
             </button>
           </section>
-          <aside className="now-watching">
-            <h2>Now watching</h2>
-            {[movies[0], movies[3], movies[6]].map((movie, index) => (
+          <aside className="community-picks">
+            <h2>Community picks</h2>
+            {movies.slice(1, 4).map((movie) => (
               <button
-                className="watching-item"
+                className="pick-item"
+                aria-label={`Rate ${movie.title}`}
                 key={movie.id}
-                onClick={() => setSelected(movie)}
+                onClick={() => void selectMovie(movie)}
               >
-                <div className="watching-image">
+                <div className="pick-image">
                   <Image
-                    src={`/images/${movie.id}.jpg`}
+                    src={poster(movie)}
                     alt=""
                     width={300}
                     height={180}
                     sizes="160px"
                   />
-                  <span className="viewer-count">
-                    <Icon name="person" size={11} />
-                    {[123, 422, 307][index]}
+                  <span className="small-rate">
+                    <Icon name="star" size={25} />
                   </span>
-                  <span className="small-play">
-                    <Icon name="play" size={27} />
-                  </span>
-                  <span
-                    className="watching-progress"
-                    style={{ width: `${[38, 65, 22][index]}%` }}
-                  />
                 </div>
-                <div className="watching-copy">
+                <div className="pick-copy">
                   <h3>{movie.title}</h3>
-                  {index === 1 && (
-                    <div className="episode-tags">
-                      <span>1 season</span>
-                      <span>6 episodes</span>
-                    </div>
-                  )}
-                  <Stats rating={movie.rating} />
+                  <Stats movie={movie} />
                 </div>
               </button>
             ))}
           </aside>
         </div>
+        )}
         <section className="genre-bar" aria-label="Filter by genre">
           <h2>
             Find by
@@ -576,37 +654,63 @@ export default function Home() {
           <div className="genre-list">
             {genres.map((item) => (
               <button
-                key={item.name}
-                className={genre === item.name ? "selected" : ""}
-                onClick={() => setGenre(genre === item.name ? "" : item.name)}
-                aria-pressed={genre === item.name}
+                key={item.id}
+                className={genre?.id === item.id ? "selected" : ""}
+                onClick={() => setGenre(genre?.id === item.id ? null : item)}
+                aria-pressed={genre?.id === item.id}
               >
-                <Icon name={item.icon} size={22} />
+                <Icon name={genreIcon[item.name.toLowerCase()] ?? "film"} size={22} />
                 {item.name}
               </button>
             ))}
           </div>
         </section>
+        <section className="people-filters" aria-label="Search by cast or director">
+          <label>
+            <span>Cast member</span>
+            <input
+              type="search"
+              value={castQuery}
+              onChange={(event) => setCastQuery(event.target.value)}
+              placeholder="Search cast"
+            />
+          </label>
+          <label>
+            <span>Director</span>
+            <input
+              type="search"
+              value={directorQuery}
+              onChange={(event) => setDirectorQuery(event.target.value)}
+              placeholder="Search directors"
+            />
+          </label>
+        </section>
         {isFiltered ? (
           <>
             <div className="filter-summary">
               <span>
-                {query
+                {castQuery
+                  ? `Cast results for “${castQuery}”`
+                  : directorQuery
+                    ? `Directed by “${directorQuery}”`
+                    : query
                   ? `Results for “${query}”`
                   : genre
-                    ? `${genre} picks`
+                    ? `${genre.name} picks`
                     : nav === "New"
                       ? "Fresh on the board"
-                      : nav === "Watchlist"
-                        ? "Your watchlist"
+                      : nav === "Ratings"
+                        ? "Your ratings"
                         : `Explore ${nav.toLowerCase()}`}
                 <small>{filtered.length} titles</small>
               </span>
               <button
                 onClick={() => {
                   setNav("Board");
-                  setGenre("");
+                  setGenre(null);
                   setQuery("");
+                  setCastQuery("");
+                  setDirectorQuery("");
                 }}
               >
                 Clear filters <Icon name="close" size={14} />
@@ -615,28 +719,28 @@ export default function Home() {
             {filtered.length ? (
               <MovieRow
                 title={
-                  nav === "Watchlist"
-                    ? "Saved for a good night"
-                    : "Made for your next movie night"
+                  nav === "Ratings"
+                    ? "Movies you’ve rated"
+                    : "Discover and rate"
                 }
                 items={
                   nav === "New"
-                    ? [...filtered].sort((a, b) => b.year - a.year)
+                    ? [...filtered].sort((a, b) => b.releaseDate.localeCompare(a.releaseDate))
                     : filtered
                 }
-                onSelect={setSelected}
+                onSelect={(movie) => void selectMovie(movie)}
               />
             ) : (
               <div className="empty-state">
                 <Icon name="film" size={36} />
                 <h2>
-                  {nav === "Watchlist"
-                    ? "Your next favorite belongs here"
+                  {nav === "Ratings"
+                    ? "Your ratings start here"
                     : "No titles found"}
                 </h2>
                 <p>
-                  {nav === "Watchlist"
-                    ? "Open any movie and add it to your watchlist."
+                  {nav === "Ratings"
+                    ? "Open any movie and choose a score from 1 to 5."
                     : "Try a different title or explore another genre."}
                 </p>
               </div>
@@ -644,32 +748,24 @@ export default function Home() {
           </>
         ) : (
           <>
-            <MovieRow title="Trending" items={movies} onSelect={setSelected} />
+            <MovieRow title="Catalogue" items={movies} onSelect={(movie) => void selectMovie(movie)} />
             <MovieRow
               title="New"
-              items={[
-                movies[7],
-                movies[3],
-                movies[2],
-                movies[10],
-                movies[8],
-                movies[9],
-                movies[4],
-                movies[1],
-              ]}
-              onSelect={setSelected}
+              items={[...movies].sort((a, b) => b.releaseDate.localeCompare(a.releaseDate)).slice(0, 8)}
+              onSelect={(movie) => void selectMovie(movie)}
             />
           </>
         )}
         <footer>
-          <span className="footer-wordmark">MOVIE GATHER</span>
+          <span className="footer-wordmark">SMS MOVIES</span>
           <span>Good stories. Better together.</span>
-          <span>Make tonight a movie night.</span>
+          <span>Your movies. Your opinion.</span>
         </footer>
       </main>
       <dialog
         ref={dialog}
         className="movie-dialog"
+        aria-labelledby="movie-title"
         onCancel={() => setSelected(null)}
         onClick={(e) => {
           if (e.target === e.currentTarget) setSelected(null);
@@ -688,42 +784,51 @@ export default function Home() {
               width={400}
               height={600}
               className="modal-poster"
-              src={`/images/${selected.id}.jpg`}
+              src={poster(selected)}
               alt={`${selected.title} poster`}
             />
             <div className="modal-content">
-              <span className="eyebrow">YOUR NEXT GREAT WATCH</span>
-              <h2>{selected.title}</h2>
+              <span className="eyebrow">DISCOVER & RATE</span>
+              <h2 id="movie-title">{selected.title}</h2>
               <div className="modal-meta">
-                {selected.year}
+                {year(selected)}
                 <span>·</span>
-                {selected.type}
+                {selected.durationMinutes} min
                 <span>·</span>
                 {selected.genre}
               </div>
-              <Stats rating={selected.rating} />
+              <div className="movie-credits">
+                <span><strong>Director</strong> {selected.director}</span>
+                {selected.cast?.length ? <span><strong>Cast</strong> {selected.cast.join(", ")}</span> : null}
+              </div>
+              <Stats movie={selected} />
               <p>{selected.description}</p>
-              <a
-                className="trailer-button"
-                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(selected.title + " official trailer")}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Icon name="play" /> Find official trailer
-              </a>
-              <button
-                className="save-button"
-                onClick={() => toggleSave(selected.id)}
-              >
-                <Icon name={saved.includes(selected.id) ? "check" : "plus"} />
-                {saved.includes(selected.id)
-                  ? "Saved to watchlist"
-                  : "Add to watchlist"}
-              </button>
-              <small className="preview-note">
-                Discover your next watch. Full streaming is not available in
-                this demo.
-              </small>
+              {user ? (
+                <RatingControl
+                  key={selected.id}
+                  movie={selected}
+                  rating={ratings[selected.id]}
+                  onRate={rateMovie}
+                />
+              ) : (
+                <p className="rating-note">
+                  Sign in to submit one personal rating for this movie, or{" "}
+                  <button
+                    className="register-link"
+                    type="button"
+                    onClick={() => {
+                      setSelected(null);
+                      setAuthMode("register");
+                      setAuthError("");
+                      setAuthMessage("");
+                      setPanel("profile");
+                    }}
+                  >
+                    register
+                  </button>
+                  .
+                </p>
+              )}
             </div>
           </>
         )}

@@ -19,6 +19,22 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+Next.js proxies same-origin `/api/*` requests to the backend. This preserves
+browser cookies and avoids browser CORS configuration. Copy the example file
+and set `BACKEND_URL` to the backend origin:
+
+```bash
+cp .env.example .env.local
+```
+
+```dotenv
+BACKEND_URL=http://localhost:8081
+```
+
+Restart the Next.js server after changing the value. When unset, the backend
+defaults to `http://localhost:8080`. The former `API_PROXY_ORIGIN` variable is
+still accepted for backwards compatibility.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

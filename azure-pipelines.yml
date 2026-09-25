@@ -46,6 +46,15 @@ jobs:
             npm | "$(Agent.OS)" | "$(nodeVersion)"
           path: $(npm_config_cache)
 
+      - task: Cache@2
+        displayName: Cache Next.js build output
+        inputs:
+          key: 'next | "$(Agent.OS)" | package-lock.json | **/*.ts | **/*.tsx | **/*.css'
+          restoreKeys: |
+            next | "$(Agent.OS)" | package-lock.json
+            next | "$(Agent.OS)"
+          path: $(Build.SourcesDirectory)/.next/cache
+
       # Always run npm ci, even on a cache hit; node_modules is not cached.
       - script: npm ci --prefer-offline --no-audit --no-fund
         displayName: Install locked dependencies
