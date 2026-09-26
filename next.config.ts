@@ -11,6 +11,8 @@ if (!/^https?:\/\//.test(backendUrl)) {
 }
 
 const nextConfig: NextConfig = {
+  // Produce a self-contained Node.js server for Azure App Service.
+  output: "standalone",
   logging: {
     browserToTerminal: true,
   },
