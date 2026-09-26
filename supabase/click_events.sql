@@ -8,8 +8,18 @@ create table if not exists public.click_events (
   session_id text not null check (char_length(session_id) between 1 and 80),
   actor_id text check (actor_id is null or char_length(actor_id) between 1 and 100),
   metadata jsonb not null default '{}'::jsonb,
-  user_agent text
+  user_agent text,
+  ip_hash text,
+  country text,
+  region text,
+  location_source text
 );
+
+-- Keep this script safe to rerun for tables created before location tracking.
+alter table public.click_events add column if not exists ip_hash text;
+alter table public.click_events add column if not exists country text;
+alter table public.click_events add column if not exists region text;
+alter table public.click_events add column if not exists location_source text;
 
 alter table public.click_events enable row level security;
 
@@ -23,3 +33,6 @@ create index if not exists click_events_event_name_idx
 create index if not exists click_events_actor_id_idx
   on public.click_events (actor_id, created_at desc)
   where actor_id is not null;
+create index if not exists click_events_country_idx
+  on public.click_events (country, created_at desc)
+  where country is not null;

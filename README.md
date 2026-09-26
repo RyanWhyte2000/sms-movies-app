@@ -43,7 +43,15 @@ SQL editor, then add your project URL and server secret to `.env.local`:
 ```dotenv
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_replace_me
+IP_HASH_SALT=replace_with_a_random_64_character_hex_value
 ```
+
+Generate the IP hashing secret with `openssl rand -hex 32`. The endpoint stores
+only a one-way HMAC of the server-observed IP, never the raw address. Country
+and region are recorded when Vercel or Cloudflare supplies coarse location
+headers; they stay empty in local development and on hosts without those
+headers. Rotating `IP_HASH_SALT` prevents new hashes from matching historical
+events.
 
 The server endpoint stores clicks on buttons and links. It records the page,
 element label, anonymous browser session, and the app user ID when signed in.
@@ -71,6 +79,7 @@ pipeline variables:
 | `productionBackendUrl` | Public HTTPS origin for the SMS Movies backend, without a trailing slash |
 | `supabaseUrl` | Supabase project URL |
 | `supabaseSecretKey` | Supabase secret key; mark this variable secret |
+| `ipHashSalt` | Random IP hashing secret from `openssl rand -hex 32`; mark this variable secret |
 
 Authorize the pipeline to use the service connection. In Azure DevOps, create
 a pipeline from the repository and select `azure-pipelines.yml`, then add the

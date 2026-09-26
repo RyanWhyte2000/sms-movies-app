@@ -210,6 +210,9 @@ function RatingControl({
             aria-label={`Rate ${score} out of 5`}
             aria-pressed={rating === score}
             disabled={saving}
+            data-track-event="rating_clicked"
+            data-track-movie-id={movie.id}
+            data-track-score={score}
             onClick={() => rate(score)}
           >
             {score}
@@ -222,7 +225,13 @@ function RatingControl({
           : "Select a score from 1 to 5."}
       </p>
       {rating && (
-        <button className="remove-rating" disabled={saving} onClick={() => rate(null)}>
+        <button
+          className="remove-rating"
+          disabled={saving}
+          data-track-event="rating_removed"
+          data-track-movie-id={movie.id}
+          onClick={() => rate(null)}
+        >
           Remove my rating
         </button>
       )}

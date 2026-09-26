@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHmac } from "node:crypto";
+
 import { logger } from "@/lib/logger";
 
 type ClickPayload = {
@@ -15,6 +17,31 @@ const text = (value: unknown, max: number) =>
   typeof value === "string" && value.length > 0 && value.length <= max
     ? value
     : null;
+
+function requestIp(request: Request) {
+  return (
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",", 1)[0]?.trim() ??
+    request.headers.get("x-real-ip")
+  );
+}
+
+function coarseLocation(request: Request) {
+  const vercelCountry = request.headers.get("x-vercel-ip-country");
+  const cloudflareCountry = request.headers.get("cf-ipcountry");
+  const countryValue = vercelCountry ?? cloudflareCountry;
+  const country =
+    countryValue && /^[a-z]{2}$/i.test(countryValue)
+      ? countryValue.toUpperCase()
+      : null;
+  const regionValue = request.headers.get("x-vercel-ip-country-region");
+
+  return {
+    country,
+    region: regionValue && regionValue.length <= 100 ? regionValue : null,
+    source: vercelCountry ? "vercel" : cloudflareCountry ? "cloudflare" : null,
+  };
+}
 
 export async function POST(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") {
@@ -56,6 +83,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid click event." }, { status: 400 });
   }
 
+  const ip = requestIp(request);
+  const ipHashSalt = process.env.IP_HASH_SALT;
+  const ipHash =
+    ip && ipHashSalt
+      ? createHmac("sha256", ipHashSalt).update(ip).digest("hex")
+      : null;
+  const eventLocation = coarseLocation(request);
+
   const response = await fetch(`${supabaseUrl}/rest/v1/click_events`, {
     method: "POST",
     headers: {
@@ -72,6 +107,10 @@ export async function POST(request: Request) {
       actor_id: actorId,
       metadata,
       user_agent: request.headers.get("user-agent")?.slice(0, 500) ?? null,
+      ip_hash: ipHash,
+      country: eventLocation.country,
+      region: eventLocation.region,
+      location_source: eventLocation.source,
     }),
     cache: "no-store",
   });

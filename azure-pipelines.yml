@@ -144,7 +144,7 @@ stages:
 
           - bash: |
               set -euo pipefail
-              required_values=("$AZURE_WEB_APP_NAME" "$AZURE_RESOURCE_GROUP" "$BACKEND_URL" "$SUPABASE_URL" "$SUPABASE_SECRET_KEY")
+              required_values=("$AZURE_WEB_APP_NAME" "$AZURE_RESOURCE_GROUP" "$BACKEND_URL" "$SUPABASE_URL" "$SUPABASE_SECRET_KEY" "$IP_HASH_SALT")
               for value in "${required_values[@]}"; do
                 if [[ -z "$value" || "$value" == \$\(*\) ]]; then
                   echo "##vso[task.logissue type=error]A required pipeline variable is missing. See README.md."
@@ -166,6 +166,10 @@ stages:
                 echo "##vso[task.logissue type=error]supabaseUrl must be an HTTPS Supabase project URL."
                 exit 1
               fi
+              if (( ${#IP_HASH_SALT} < 32 )); then
+                echo "##vso[task.logissue type=error]ipHashSalt must contain at least 32 characters."
+                exit 1
+              fi
             displayName: Validate production configuration
             env:
               AZURE_WEB_APP_NAME: $(azureWebAppName)
@@ -173,6 +177,7 @@ stages:
               BACKEND_URL: $(productionBackendUrl)
               SUPABASE_URL: $(supabaseUrl)
               SUPABASE_SECRET_KEY: $(supabaseSecretKey)
+              IP_HASH_SALT: $(ipHashSalt)
 
           - task: AzureAppServiceSettings@1
             displayName: Configure App Service runtime
@@ -187,7 +192,8 @@ stages:
                   { "name": "HOSTNAME", "value": "0.0.0.0", "slotSetting": false },
                   { "name": "BACKEND_URL", "value": "$(productionBackendUrl)", "slotSetting": false },
                   { "name": "SUPABASE_URL", "value": "$(supabaseUrl)", "slotSetting": false },
-                  { "name": "SUPABASE_SECRET_KEY", "value": "$(supabaseSecretKey)", "slotSetting": false }
+                  { "name": "SUPABASE_SECRET_KEY", "value": "$(supabaseSecretKey)", "slotSetting": false },
+                  { "name": "IP_HASH_SALT", "value": "$(ipHashSalt)", "slotSetting": false }
                 ]
 
           - task: AzureWebApp@1
