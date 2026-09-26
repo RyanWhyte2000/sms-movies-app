@@ -877,6 +877,69 @@ footer {
   color: #bbb7ab;
   margin: 23px 0;
 }
+.third-party-ratings {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #ffffff08;
+}
+.third-party-ratings-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.third-party-ratings h3 {
+  margin: 5px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ratings-access {
+  color: #aaa38e;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.third-party-ratings ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.third-party-ratings li {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #08080666;
+}
+.rating-source,
+.rating-votes {
+  color: var(--muted);
+  font-size: 11px;
+}
+.third-party-ratings strong {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 19px;
+  font-weight: 600;
+}
+.third-party-ratings strong svg {
+  color: #d9c999;
+}
+.third-party-ratings strong small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.third-party-ratings .ratings-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 
 @media (min-width: 1600px) {
   .app-shell {

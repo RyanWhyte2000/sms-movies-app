@@ -174,6 +174,42 @@ function Stats({ movie }: { movie: Movie }) {
   );
 }
 
+function ThirdPartyRatings({ movie }: { movie: Movie }) {
+  const externalRatings = displayRating(movie);
+
+  return (
+    <section className="third-party-ratings" aria-labelledby="third-party-ratings-title">
+      <div className="third-party-ratings-heading">
+        <div>
+          <span className="eyebrow">CRITICS &amp; AUDIENCES</span>
+          <h3 id="third-party-ratings-title">Third-party ratings</h3>
+        </div>
+        <span className="ratings-access">Available to everyone</span>
+      </div>
+      {externalRatings ? (
+        <ul>
+          {externalRatings.map((rating) => (
+            <li key={`${rating.source}-${rating.fetchedAt}`}>
+              <span className="rating-source">{rating.source}</span>
+              <strong>
+                <Icon name="star" size={17} />
+                {rating.score}<small>/{rating.scaleMax}</small>
+              </strong>
+              {rating.voteCount > 0 && (
+                <span className="rating-votes">
+                  {new Intl.NumberFormat().format(rating.voteCount)} votes
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="ratings-empty">No third-party ratings are available yet.</p>
+      )}
+    </section>
+  );
+}
+
 function RatingControl({
   movie,
   rating,
@@ -277,7 +313,7 @@ function MovieRow({
         {items.map((movie) => (
           <button
             className="movie-card"
-            aria-label={`Rate ${movie.title}`}
+            aria-label={`View details for ${movie.title}`}
             key={movie.id}
             onClick={() => onSelect(movie)}
           >
@@ -844,8 +880,8 @@ export default function Home() {
                 <span><strong>Director</strong> {selected.director}</span>
                 {selected.cast?.length ? <span><strong>Cast</strong> {selected.cast.join(", ")}</span> : null}
               </div>
-              <Stats movie={selected} />
               <p>{selected.description}</p>
+              <ThirdPartyRatings movie={selected} />
               {user ? (
                 <RatingControl
                   key={selected.id}
