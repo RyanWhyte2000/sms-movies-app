@@ -289,6 +289,20 @@ button:hover {
   color: #fff;
   padding: 10px 12px;
 }
+.header-panel form .password-visibility {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  cursor: pointer;
+}
+.header-panel form .password-visibility input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #d9c999;
+}
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;

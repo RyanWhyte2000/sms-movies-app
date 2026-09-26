@@ -310,6 +310,8 @@ export default function Home() {
   const [apiError, setApiError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authError, setAuthError] = useState("");
@@ -389,6 +391,8 @@ export default function Home() {
   async function finishAuthentication(account: User, action: ReturnType<typeof createActionContext>) {
     setUser(account);
     setPassword("");
+    setPasswordConfirmation("");
+    setShowPassword(false);
     setAuthError("");
     setAuthMessage("");
     setPanel(null);
@@ -414,7 +418,12 @@ export default function Home() {
     finally { setAuthPending(false); }
   }
   async function createAccount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
+    event.preventDefault(); setAuthError(""); setAuthMessage("");
+    if (password !== passwordConfirmation) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+    setAuthPending(true);
     const action = createActionContext();
     try {
       const account = await register(email, password, displayName, action);
@@ -573,13 +582,15 @@ export default function Home() {
             ) : panel === "profile" ? (
               <form onSubmit={authMode === "login" ? signIn : createAccount}>
                 <div className="auth-tabs" role="tablist" aria-label="Account access">
-                  <button type="button" role="tab" aria-selected={authMode === "login"} onClick={() => { setAuthMode("login"); setAuthError(""); setAuthMessage(""); }}>Sign in</button>
+                  <button type="button" role="tab" aria-selected={authMode === "login"} onClick={() => { setAuthMode("login"); setPasswordConfirmation(""); setAuthError(""); setAuthMessage(""); }}>Sign in</button>
                   <button type="button" role="tab" aria-selected={authMode === "register"} onClick={() => { setAuthMode("register"); setAuthError(""); setAuthMessage(""); }}>Register</button>
                 </div>
                 <p>{authMode === "login" ? "Browse and search the catalogue as a guest. Sign in to add personal ratings." : "Create an account and you’ll be signed in automatically."}</p>
                 {authMode === "register" && <label>Display name<input type="text" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={120} required /></label>}
                 <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-                <label>Password<input type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={authMode === "register" ? 12 : undefined} maxLength={128} required /></label>
+                <label>Password<input type={showPassword ? "text" : "password"} autoComplete={authMode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={authMode === "register" ? 12 : undefined} maxLength={128} required /></label>
+                {authMode === "register" && <label>Confirm password<input type={showPassword ? "text" : "password"} autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} minLength={12} maxLength={128} required /></label>}
+                <label className="password-visibility"><input type="checkbox" checked={showPassword} onChange={(event) => setShowPassword(event.target.checked)} />Show password{authMode === "register" ? "s" : ""}</label>
                 {authMode === "register" && <small>Use 12–128 characters.</small>}
                 <button className="auth-submit" type="submit" disabled={authPending}>{authPending ? "Please wait…" : authMode === "login" ? "Sign in" : "Create account"}</button>
                 {authMessage && <p className="auth-success" role="status">{authMessage}</p>}
