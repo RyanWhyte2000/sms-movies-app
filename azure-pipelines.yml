@@ -136,70 +136,66 @@ stages:
     dependsOn: Validate
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
-      - deployment: DeployWebApp
+      - job: DeployWebApp
         displayName: Deploy movie app
-        environment: sms-movies-production
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - download: current
-                  artifact: movie-app
+        steps:
+          - download: current
+            artifact: movie-app
 
-                - bash: |
-                    set -euo pipefail
-                    required_values=("$AZURE_WEB_APP_NAME" "$AZURE_RESOURCE_GROUP" "$BACKEND_URL" "$SUPABASE_URL" "$SUPABASE_SECRET_KEY")
-                    for value in "${required_values[@]}"; do
-                      if [[ -z "$value" || "$value" == \$\(*\) ]]; then
-                        echo "##vso[task.logissue type=error]A required pipeline variable is missing. See README.md."
-                        exit 1
-                      fi
-                    done
-                    case "$BACKEND_URL" in
-                      https://localhost*|https://127.0.0.1*|https://\[::1\]*)
-                        echo "##vso[task.logissue type=error]productionBackendUrl must not point to localhost."
-                        exit 1
-                        ;;
-                      https://*) ;;
-                      *)
-                        echo "##vso[task.logissue type=error]productionBackendUrl must be an absolute HTTPS URL."
-                        exit 1
-                        ;;
-                    esac
-                    if [[ "$SUPABASE_URL" != https://*.supabase.co* ]]; then
-                      echo "##vso[task.logissue type=error]supabaseUrl must be an HTTPS Supabase project URL."
-                      exit 1
-                    fi
-                  displayName: Validate production configuration
-                  env:
-                    AZURE_WEB_APP_NAME: $(azureWebAppName)
-                    AZURE_RESOURCE_GROUP: $(azureResourceGroup)
-                    BACKEND_URL: $(productionBackendUrl)
-                    SUPABASE_URL: $(supabaseUrl)
-                    SUPABASE_SECRET_KEY: $(supabaseSecretKey)
+          - bash: |
+              set -euo pipefail
+              required_values=("$AZURE_WEB_APP_NAME" "$AZURE_RESOURCE_GROUP" "$BACKEND_URL" "$SUPABASE_URL" "$SUPABASE_SECRET_KEY")
+              for value in "${required_values[@]}"; do
+                if [[ -z "$value" || "$value" == \$\(*\) ]]; then
+                  echo "##vso[task.logissue type=error]A required pipeline variable is missing. See README.md."
+                  exit 1
+                fi
+              done
+              case "$BACKEND_URL" in
+                https://localhost*|https://127.0.0.1*|https://\[::1\]*)
+                  echo "##vso[task.logissue type=error]productionBackendUrl must not point to localhost."
+                  exit 1
+                  ;;
+                https://*) ;;
+                *)
+                  echo "##vso[task.logissue type=error]productionBackendUrl must be an absolute HTTPS URL."
+                  exit 1
+                  ;;
+              esac
+              if [[ "$SUPABASE_URL" != https://*.supabase.co* ]]; then
+                echo "##vso[task.logissue type=error]supabaseUrl must be an HTTPS Supabase project URL."
+                exit 1
+              fi
+            displayName: Validate production configuration
+            env:
+              AZURE_WEB_APP_NAME: $(azureWebAppName)
+              AZURE_RESOURCE_GROUP: $(azureResourceGroup)
+              BACKEND_URL: $(productionBackendUrl)
+              SUPABASE_URL: $(supabaseUrl)
+              SUPABASE_SECRET_KEY: $(supabaseSecretKey)
 
-                - task: AzureAppServiceSettings@1
-                  displayName: Configure App Service runtime
-                  inputs:
-                    azureSubscription: $(azureServiceConnection)
-                    appName: $(azureWebAppName)
-                    resourceGroupName: $(azureResourceGroup)
-                    appSettings: |
-                      [
-                        { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "false", "slotSetting": false },
-                        { "name": "NEXT_TELEMETRY_DISABLED", "value": "1", "slotSetting": false },
-                        { "name": "HOSTNAME", "value": "0.0.0.0", "slotSetting": false },
-                        { "name": "BACKEND_URL", "value": "$(productionBackendUrl)", "slotSetting": false },
-                        { "name": "SUPABASE_URL", "value": "$(supabaseUrl)", "slotSetting": false },
-                        { "name": "SUPABASE_SECRET_KEY", "value": "$(supabaseSecretKey)", "slotSetting": false }
-                      ]
+          - task: AzureAppServiceSettings@1
+            displayName: Configure App Service runtime
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appName: $(azureWebAppName)
+              resourceGroupName: $(azureResourceGroup)
+              appSettings: |
+                [
+                  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "false", "slotSetting": false },
+                  { "name": "NEXT_TELEMETRY_DISABLED", "value": "1", "slotSetting": false },
+                  { "name": "HOSTNAME", "value": "0.0.0.0", "slotSetting": false },
+                  { "name": "BACKEND_URL", "value": "$(productionBackendUrl)", "slotSetting": false },
+                  { "name": "SUPABASE_URL", "value": "$(supabaseUrl)", "slotSetting": false },
+                  { "name": "SUPABASE_SECRET_KEY", "value": "$(supabaseSecretKey)", "slotSetting": false }
+                ]
 
-                - task: AzureWebApp@1
-                  displayName: Deploy successful main build
-                  inputs:
-                    azureSubscription: $(azureServiceConnection)
-                    appType: webAppLinux
-                    appName: $(azureWebAppName)
-                    package: $(Pipeline.Workspace)/movie-app/movie-app.zip
-                    runtimeStack: NODE|22-lts
-                    startUpCommand: node server.js
+          - task: AzureWebApp@1
+            displayName: Deploy successful main build
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: webAppLinux
+              appName: $(azureWebAppName)
+              package: $(Pipeline.Workspace)/movie-app/movie-app.zip
+              runtimeStack: NODE|22-lts
+              startUpCommand: node server.js
