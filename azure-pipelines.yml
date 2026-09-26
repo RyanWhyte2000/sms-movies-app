@@ -1,6 +1,5 @@
 # CI/CD for the SMS Movies Next.js app on Azure App Service (Linux).
-# Create the `sms-movies-production` variable group before running this pipeline;
-# the required variables are documented in README.md.
+# Configure the required pipeline variables documented in README.md.
 name: $(Date:yyyyMMdd).$(Rev:r)
 
 trigger:
@@ -21,7 +20,6 @@ pool:
   vmImage: ubuntu-24.04
 
 variables:
-  - group: sms-movies-production
   - name: nodeVersion
     value: '22.x'
   - name: npm_config_cache
@@ -153,7 +151,7 @@ stages:
                     required_values=("$AZURE_WEB_APP_NAME" "$AZURE_RESOURCE_GROUP" "$BACKEND_URL" "$SUPABASE_URL" "$SUPABASE_SECRET_KEY")
                     for value in "${required_values[@]}"; do
                       if [[ -z "$value" || "$value" == \$\(*\) ]]; then
-                        echo "##vso[task.logissue type=error]A required variable in the sms-movies-production variable group is missing. See README.md."
+                        echo "##vso[task.logissue type=error]A required pipeline variable is missing. See README.md."
                         exit 1
                       fi
                     done

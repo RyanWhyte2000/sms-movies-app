@@ -60,8 +60,8 @@ Next.js server, and deploys successful `main` builds to a Linux App Service.
 
 Before creating the pipeline, provision a Linux App Service that supports
 Node.js 22 and create an Azure Resource Manager service connection in Azure
-DevOps. Then create a variable group named `sms-movies-production` under
-**Pipelines > Library** with these variables:
+DevOps. In the pipeline editor, open **Variables** and add these independent
+pipeline variables:
 
 | Variable | Value |
 | --- | --- |
@@ -72,12 +72,12 @@ DevOps. Then create a variable group named `sms-movies-production` under
 | `supabaseUrl` | Supabase project URL |
 | `supabaseSecretKey` | Supabase secret key; mark this variable secret |
 
-Authorize the pipeline to use both the service connection and variable group.
-In Azure DevOps, create a pipeline from the repository and select
-`azure-pipelines.yml`. Pushes to `main` deploy automatically after validation;
-pull requests only run validation. For Azure Repos Git, add the pipeline as a
-required build-validation policy on the `main` branch because YAML `pr`
-triggers apply only to GitHub and Bitbucket Cloud.
+Authorize the pipeline to use the service connection. In Azure DevOps, create
+a pipeline from the repository and select `azure-pipelines.yml`, then add the
+variables before its first run. Pushes to `main` deploy automatically after
+validation; pull requests only run validation. For Azure Repos Git, add the
+pipeline as a required build-validation policy on the `main` branch because
+YAML `pr` triggers apply only to GitHub and Bitbucket Cloud.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
