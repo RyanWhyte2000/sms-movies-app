@@ -126,7 +126,6 @@ stages:
               archiveFile: $(Build.ArtifactStagingDirectory)/movie-app.zip
               replaceExistingArchive: true
 
-          # App Service build automation installs locked runtime dependencies after deployment.
           - task: PublishPipelineArtifact@1
             displayName: Publish successful build
             inputs:
