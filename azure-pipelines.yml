@@ -24,79 +24,150 @@ variables:
   NEXT_TELEMETRY_DISABLED: '1'
   CI: 'true'
 
-jobs:
-  - job: ValidateAndBuild
-    displayName: Validate and build movie app
-    timeoutInMinutes: 20
-    steps:
-      - checkout: self
-        clean: true
-        persistCredentials: false
+stages:
+  - stage: Validate
+    displayName: Test and build
+    jobs:
+      - job: ValidateAndBuild
+        displayName: Validate and build movie app
+        timeoutInMinutes: 20
+        steps:
+          - checkout: self
+            clean: true
+            persistCredentials: false
 
-      - task: UseNode@1
-        displayName: Use Node.js $(nodeVersion)
-        inputs:
-          version: $(nodeVersion)
+          - task: UseNode@1
+            displayName: Use Node.js $(nodeVersion)
+            inputs:
+              version: $(nodeVersion)
 
-      - task: Cache@2
-        displayName: Cache npm downloads
-        inputs:
-          key: 'npm | "$(Agent.OS)" | "$(nodeVersion)" | package-lock.json'
-          restoreKeys: |
-            npm | "$(Agent.OS)" | "$(nodeVersion)"
-          path: $(npm_config_cache)
+          - task: Cache@2
+            displayName: Cache npm downloads
+            inputs:
+              key: 'npm | "$(Agent.OS)" | "$(nodeVersion)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)" | "$(nodeVersion)"
+              path: $(npm_config_cache)
 
-      - task: Cache@2
-        displayName: Cache Next.js build output
-        inputs:
-          key: 'next | "$(Agent.OS)" | package-lock.json | **/*.ts | **/*.tsx | **/*.css'
-          restoreKeys: |
-            next | "$(Agent.OS)" | package-lock.json
-            next | "$(Agent.OS)"
-          path: $(Build.SourcesDirectory)/.next/cache
+          - task: Cache@2
+            displayName: Cache Next.js build output
+            inputs:
+              key: 'next | "$(Agent.OS)" | package-lock.json | **/*.ts | **/*.tsx | **/*.css'
+              restoreKeys: |
+                next | "$(Agent.OS)" | package-lock.json
+                next | "$(Agent.OS)"
+              path: $(Build.SourcesDirectory)/.next/cache
 
-      # Always run npm ci, even on a cache hit; node_modules is not cached.
-      - script: npm ci --prefer-offline --no-audit --no-fund
-        displayName: Install locked dependencies
+          # Always run npm ci, even on a cache hit; node_modules is not cached.
+          - script: npm ci --prefer-offline --no-audit --no-fund
+            displayName: Install locked dependencies
 
-      - script: npm run lint -- --max-warnings=0
-        displayName: Check ESLint
+          - script: npm run lint -- --max-warnings=0
+            displayName: Check ESLint
 
-      - script: |
-          set -euo pipefail
-          npx --no-install next typegen
-          npx --no-install tsc --noEmit
-        displayName: Generate route types and check TypeScript
+          - script: |
+              set -euo pipefail
+              npx --no-install next typegen
+              npx --no-install tsc --noEmit
+            displayName: Generate route types and check TypeScript
 
-      # TODO: Add mandatory tests, coverage >= 80%, and test/coverage report
-      # publication when the test suite is implemented. No test gate is claimed yet.
+          - script: npm run test:coverage
+            displayName: Run tests and enforce 80% coverage
 
-      # Use the bundler already verified for this project.
-      - script: npm run build -- --webpack
-        displayName: Build production application
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: test-results/junit.xml
+              failTaskOnFailedTests: true
 
-      - task: CopyFiles@2
-        displayName: Stage build output
-        inputs:
-          SourceFolder: $(Build.SourcesDirectory)
-          Contents: |
-            .next/**
-            !.next/cache/**
-            !.next/dev/**
-            public/**
-            package.json
-            package-lock.json
-            next.config.ts
-            tsconfig.json
-            next-env.d.ts
-          TargetFolder: $(Build.ArtifactStagingDirectory)/movie-app
-          CleanTargetFolder: true
+          - task: PublishCodeCoverageResults@2
+            displayName: Publish code coverage
+            condition: always()
+            inputs:
+              summaryFileLocation: coverage/cobertura-coverage.xml
 
-      # Build output only: runtime dependencies must be installed before npm start.
-      # This does not deploy the application or include credentials/environment files.
-      - task: PublishPipelineArtifact@1
-        displayName: Publish successful build
-        inputs:
-          targetPath: $(Build.ArtifactStagingDirectory)/movie-app
-          artifact: movie-app
-          publishLocation: pipeline
+          # Use the bundler already verified for this project.
+          - script: npm run build -- --webpack
+            displayName: Build production application
+
+          - task: CopyFiles@2
+            displayName: Stage build output
+            inputs:
+              SourceFolder: $(Build.SourcesDirectory)
+              Contents: |
+                .next/**
+                !.next/cache/**
+                !.next/dev/**
+                public/**
+                package.json
+                package-lock.json
+                next.config.ts
+                tsconfig.json
+                next-env.d.ts
+              TargetFolder: $(Build.ArtifactStagingDirectory)/movie-app
+              CleanTargetFolder: true
+
+          # App Service build automation installs locked runtime dependencies after deployment.
+          - task: PublishPipelineArtifact@1
+            displayName: Publish successful build
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/movie-app
+              artifact: movie-app
+              publishLocation: pipeline
+
+  - stage: Deploy
+    displayName: Deploy to Azure App Service
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployWebApp
+        displayName: Deploy movie app
+        environment: sms-movies-production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: movie-app
+
+                - bash: |
+                    set -euo pipefail
+                    case "$BACKEND_URL" in
+                      https://localhost*|https://127.0.0.1*|https://\[::1\]*)
+                        echo "##vso[task.logissue type=error]productionBackendUrl must not point to localhost."
+                        exit 1
+                        ;;
+                      https://*) ;;
+                      *)
+                        echo "##vso[task.logissue type=error]productionBackendUrl must be an absolute HTTPS URL."
+                        exit 1
+                        ;;
+                    esac
+                  displayName: Validate production backend URL
+                  env:
+                    BACKEND_URL: $(productionBackendUrl)
+
+                - task: AzureAppServiceSettings@1
+                  displayName: Enable App Service build automation
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    appName: $(azureWebAppName)
+                    resourceGroupName: $(azureResourceGroup)
+                    appSettings: |
+                      [
+                        { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true", "slotSetting": false },
+                        { "name": "NEXT_TELEMETRY_DISABLED", "value": "1", "slotSetting": false },
+                        { "name": "BACKEND_URL", "value": "$(productionBackendUrl)", "slotSetting": false }
+                      ]
+
+                - task: AzureWebApp@1
+                  displayName: Deploy successful main build
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    appType: webAppLinux
+                    appName: $(azureWebAppName)
+                    package: $(Pipeline.Workspace)/movie-app
+                    runtimeStack: NODE|22-lts
+                    startUpCommand: npm start

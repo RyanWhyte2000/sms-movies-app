@@ -11,6 +11,9 @@ if (!/^https?:\/\//.test(backendUrl)) {
 }
 
 const nextConfig: NextConfig = {
+  logging: {
+    browserToTerminal: true,
+  },
   async rewrites() {
     return [
       {

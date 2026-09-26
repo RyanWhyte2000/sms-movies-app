@@ -35,6 +35,23 @@ Restart the Next.js server after changing the value. When unset, the backend
 defaults to `http://localhost:8080`. The former `API_PROXY_ORIGIN` variable is
 still accepted for backwards compatibility.
 
+## Click event tracking
+
+Run [`supabase/click_events.sql`](./supabase/click_events.sql) in the Supabase
+SQL editor, then add your project URL and server secret to `.env.local`:
+
+```dotenv
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_replace_me
+```
+
+The server endpoint stores clicks on buttons and links. It records the page,
+element label, anonymous browser session, and the app user ID when signed in.
+The secret key stays on the server; the table has RLS enabled and grants no
+direct access to browser roles. Tracking is best-effort and never blocks a
+user action. Add `data-track="off"` to an element when its clicks should not be
+recorded, or `data-track-event="event_name"` to give it a stable event name.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

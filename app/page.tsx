@@ -5,11 +5,13 @@ import type { FormEvent } from "react";
 
 import Image from "next/image";
 import Link from "next/link";
+import { identifyClickActor } from "@/lib/click-tracking";
 import {
   ApiError,
   ApiMovie,
   Genre,
   User,
+  createActionContext,
   getGenres,
   getMe,
   getMovie,
@@ -318,11 +320,12 @@ export default function Home() {
   const admin = isAdmin(user);
 
   useEffect(() => {
-    void getGenres().then(setGenres).catch(() => setGenres([]));
-    void getMe()
+    const action = createActionContext();
+    void getGenres(action).then(setGenres).catch(() => setGenres([]));
+    void getMe(action)
       .then(async (account) => {
         setUser(account);
-        const page = await getRatings();
+        const page = await getRatings(action);
         setRatings(Object.fromEntries(page.content.map((rating) => [rating.movieId, rating.score])));
       })
       .catch((cause) => {
@@ -337,13 +340,14 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
+      const action = createActionContext();
       setLoading(true);
       getMovies({
         q: query.trim() || undefined,
         cast: castQuery.trim() || undefined,
         director: directorQuery.trim() || undefined,
         genreId: genre?.id,
-      })
+      }, action)
         .then((page) => {
           if (!controller.signal.aborted) {
             setMovies(page.content);
@@ -366,17 +370,23 @@ export default function Home() {
     if (selected) dialog.current?.showModal();
     else dialog.current?.close();
   }, [selected]);
+
+  useEffect(() => {
+    identifyClickActor(user?.id);
+  }, [user]);
+
   async function rateMovie(id: string, score: number | null) {
     if (!user) throw new Error("Sign in to submit a personal rating.");
-    if (score === null) await removeRating(id);
-    else await saveRating(id, score);
+    const action = createActionContext();
+    if (score === null) await removeRating(id, action);
+    else await saveRating(id, score, action);
     setRatings((current) => {
       const next = { ...current };
       if (score === null) delete next[id]; else next[id] = score;
       return next;
     });
   }
-  async function finishAuthentication(account: User) {
+  async function finishAuthentication(account: User, action: ReturnType<typeof createActionContext>) {
     setUser(account);
     setPassword("");
     setAuthError("");
@@ -384,8 +394,8 @@ export default function Home() {
     setPanel(null);
 
     const [ratingsResult, genresResult] = await Promise.allSettled([
-      getRatings(),
-      getGenres(),
+      getRatings(action),
+      getGenres(action),
     ]);
     if (ratingsResult.status === "fulfilled") {
       setRatings(Object.fromEntries(ratingsResult.value.content.map((rating) => [rating.movieId, rating.score])));
@@ -396,33 +406,26 @@ export default function Home() {
   }
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
+    const action = createActionContext();
     try {
-      const account = await login(email, password);
-      await finishAuthentication(account);
+      const account = await login(email, password, action);
+      await finishAuthentication(account, action);
     } catch (cause) { setAuthError(formatAuthError(cause, "Sign in failed.")); }
     finally { setAuthPending(false); }
   }
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthPending(true);
-    let accountCreated = false;
+    const action = createActionContext();
     try {
-      await register(email, password, displayName);
-      accountCreated = true;
-      const account = await login(email, password);
-      await finishAuthentication(account);
+      const account = await register(email, password, displayName, action);
+      await finishAuthentication(account, action);
     } catch (cause) {
-      const message = formatAuthError(cause, accountCreated ? "Automatic sign in failed." : "Registration failed.");
-      if (accountCreated) {
-        setAuthMode("login");
-        setAuthError(`Your account was created, but automatic sign in failed. ${message}`);
-      } else {
-        setAuthError(message);
-      }
+      setAuthError(formatAuthError(cause, "Registration failed."));
     }
     finally { setAuthPending(false); }
   }
   async function signOut() {
-    try { await logout(); setUser(null); setRatings({}); setPanel(null); }
+    try { await logout(createActionContext()); setUser(null); setRatings({}); setPanel(null); }
     catch (cause) { setAuthError(cause instanceof Error ? cause.message : "Sign out failed."); }
   }
   async function shareCollection() {
@@ -452,7 +455,7 @@ export default function Home() {
     }
   }
   async function selectMovie(movie: Movie) {
-    try { setSelected(await getMovie(movie.id)); }
+    try { setSelected(await getMovie(movie.id, createActionContext())); }
     catch { setSelected(movie); }
   }
   const featured = movies.length ? movies[slide % Math.min(movies.length, 4)] : null;
