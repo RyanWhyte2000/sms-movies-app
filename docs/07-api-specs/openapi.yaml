@@ -1,0 +1,923 @@
+openapi: 3.0.3
+info:
+  title: Movies API
+  version: 1.0.0
+  description: REST API for movie catalogue, discovery, ratings, collections, and sharing.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: Auth
+  - name: Account
+  - name: Movies
+  - name: Genres
+  - name: People
+  - name: External Ratings
+  - name: Personal Ratings
+  - name: Collection
+  - name: Collection Shares
+  - name: Shared Collections
+  - name: Natural-language Search
+  - name: Recommendations
+  - name: Analytics
+  - name: Audit
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterRequest'}
+      responses:
+        '201':
+          description: Account created and session established.
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/SetCookie'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: Authenticated session established.
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/SetCookie'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out
+      responses:
+        '204': {description: Session ended.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me:
+    get:
+      tags: [Account]
+      summary: Get current user
+      responses:
+        '200':
+          description: Current account.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/movies:
+    get:
+      tags: [Movies]
+      summary: Search movies
+      security: [{}, {sessionCookie: []}]
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 200}}
+        - {name: cast, in: query, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {name: director, in: query, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {name: genreId, in: query, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {name: castId, in: query, deprecated: true, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {name: directorId, in: query, deprecated: true, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Paginated movies.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MoviePage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    post:
+      tags: [Movies]
+      summary: Create a movie
+      description: Requires the ADMIN role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MovieRequest'}
+      responses:
+        '201':
+          description: Movie created.
+          headers:
+            Location: {schema: {type: string, format: uri-reference}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Movie'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/movies/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/MovieId'}
+    get:
+      tags: [Movies]
+      summary: Get movie details
+      security: [{}, {sessionCookie: []}]
+      responses:
+        '200':
+          description: Movie details.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MovieDetails'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    put:
+      tags: [Movies]
+      summary: Update a movie
+      description: Requires the ADMIN role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MovieRequest'}
+      responses:
+        '200':
+          description: Updated movie.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Movie'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    delete:
+      tags: [Movies]
+      summary: Delete a movie
+      description: Requires the ADMIN role.
+      responses:
+        '204': {description: Movie deleted.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/movies/{movieId}/external-ratings/{source}:
+    put:
+      tags: [External Ratings]
+      summary: Save an external rating
+      description: Requires the ADMIN role.
+      parameters:
+        - {$ref: '#/components/parameters/MovieIdNamed'}
+        - name: source
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,80}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExternalRatingRequest'}
+      responses:
+        '200':
+          description: Saved rating.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExternalRating'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/movies/{movieId}/external-ratings/sync:
+    post:
+      tags: [External Ratings]
+      summary: Retrieve and store an external rating
+      description: Requires the ADMIN role. The response body can be absent when no provider result exists.
+      parameters:
+        - {$ref: '#/components/parameters/MovieIdNamed'}
+      responses:
+        '200':
+          description: Latest provider rating, when found.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExternalRating'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/genres:
+    get:
+      tags: [Genres]
+      summary: List genres
+      security: []
+      responses:
+        '200':
+          description: Genres.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/NamedItem'}}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    post:
+      tags: [Genres]
+      summary: Create a genre
+      description: Requires the ADMIN role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GenreNameRequest'}
+      responses:
+        '201':
+          description: Genre created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NamedItem'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/people:
+    get:
+      tags: [People]
+      summary: Search people
+      security: []
+      parameters:
+        - {name: q, in: query, schema: {type: string, default: '', maxLength: 200}}
+        - {name: role, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Paginated people.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NamedItemPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    post:
+      tags: [People]
+      summary: Create a person
+      description: Requires the ADMIN role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PersonNameRequest'}
+      responses:
+        '201':
+          description: Person created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NamedItem'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/ratings:
+    get:
+      tags: [Personal Ratings]
+      summary: List personal ratings
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Paginated ratings.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RatingPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/ratings/{movieId}:
+    parameters:
+      - {$ref: '#/components/parameters/MovieIdNamed'}
+    put:
+      tags: [Personal Ratings]
+      summary: Save a personal rating
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RatingRequest'}
+      responses:
+        '200':
+          description: Saved rating.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RatingResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    delete:
+      tags: [Personal Ratings]
+      summary: Delete a personal rating
+      responses:
+        '204': {description: Rating deleted.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/collections:
+    get:
+      tags: [Collection]
+      summary: List collections
+      description: Requires the ADMIN role.
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Paginated collections.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    post:
+      tags: [Collection]
+      summary: Create a collection
+      description: Requires the ADMIN role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionNameRequest'}
+      responses:
+        '201':
+          description: Collection created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Collection'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/collections/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CollectionId'}
+    get:
+      tags: [Collection]
+      summary: Get a collection
+      description: Requires the ADMIN role.
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Collection and its movies.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionDetails'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    patch:
+      tags: [Collection]
+      summary: Rename a collection
+      description: Requires the ADMIN role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionNameRequest'}
+      responses:
+        '200':
+          description: Renamed collection.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Collection'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    delete:
+      tags: [Collection]
+      summary: Delete a collection
+      description: Requires the ADMIN role.
+      responses:
+        '204': {description: Collection deleted.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/collections/{id}/movies/{movieId}:
+    parameters:
+      - {$ref: '#/components/parameters/CollectionId'}
+      - {$ref: '#/components/parameters/MovieIdNamed'}
+    put:
+      tags: [Collection]
+      summary: Add a movie to a collection
+      description: Requires the ADMIN role. Idempotent.
+      responses:
+        '204': {description: Movie is in the collection.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    delete:
+      tags: [Collection]
+      summary: Remove a movie from a collection
+      description: Requires the ADMIN role. Idempotent.
+      responses:
+        '204': {description: Movie is absent from the collection.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/collections/{collectionId}/shares:
+    parameters:
+      - {$ref: '#/components/parameters/CollectionIdNamed'}
+    get:
+      tags: [Collection Shares]
+      summary: List collection shares
+      description: Requires the ADMIN role.
+      responses:
+        '200':
+          description: Share metadata without tokens.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Share'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+    post:
+      tags: [Collection Shares]
+      summary: Create a share link
+      description: Requires the ADMIN role. The request body is optional.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ShareRequest'}
+      responses:
+        '201':
+          description: Share created. The token is returned only at creation.
+          headers:
+            Location: {schema: {type: string, format: uri-reference}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreatedShare'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/collections/{collectionId}/shares/{shareId}:
+    delete:
+      tags: [Collection Shares]
+      summary: Revoke a share link
+      description: Requires the ADMIN role.
+      parameters:
+        - {$ref: '#/components/parameters/CollectionIdNamed'}
+        - name: shareId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '204': {description: Share revoked.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/shared/collections/{token}:
+    get:
+      tags: [Shared Collections]
+      summary: Read a shared collection
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string, maxLength: 100}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Public collection view.
+          headers:
+            Cache-Control: {schema: {type: string, example: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SharedCollection'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/search/natural-language:
+    post:
+      tags: [Natural-language Search]
+      summary: Search with natural language
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SearchRequest'}
+      responses:
+        '200':
+          description: Ranked results.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiscoveryResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/recommendations:
+    post:
+      tags: [Recommendations]
+      summary: Recommend movies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecommendationRequest'}
+      responses:
+        '200':
+          description: Personalized recommendations.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiscoveryResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/analytics/events:
+    post:
+      tags: [Analytics]
+      summary: Record an analytics event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AnalyticsEventRequest'}
+      responses:
+        '202': {description: Event accepted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+  /api/me/audit-events:
+    get:
+      tags: [Audit]
+      summary: List audit events
+      parameters:
+        - {name: action, in: query, schema: {type: string, maxLength: 80}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: Paginated audit events.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditEventPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalServerError'}
+security:
+  - sessionCookie: []
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: SESSION
+      description: Server-side session cookie returned by register or login.
+  headers:
+    SetCookie:
+      description: Session cookie.
+      schema: {type: string, example: 'SESSION=...; Path=/; HttpOnly; SameSite=Lax'}
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+    Size:
+      name: size
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    MovieId:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    MovieIdNamed:
+      name: movieId
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    CollectionId:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    CollectionIdNamed:
+      name: collectionId
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+  responses:
+    BadRequest:
+      description: The request is malformed or fails validation.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Unauthorized:
+      description: Authentication is required or credentials are invalid.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Forbidden:
+      description: The caller is not allowed to perform this operation.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    NotFound:
+      description: The requested resource does not exist.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Conflict:
+      description: The request conflicts with an existing record or resource state.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    InternalServerError:
+      description: Unexpected server failure. Report the correlation ID.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+  schemas:
+    Uuid: {type: string, format: uuid}
+    RegisterRequest:
+      type: object
+      required: [email, password, displayName]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, format: password, minLength: 12, maxLength: 128, writeOnly: true}
+        displayName: {type: string, minLength: 1, maxLength: 100}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, format: password, maxLength: 128, writeOnly: true}
+    UserResponse:
+      type: object
+      required: [id, email, displayName, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: string, format: email}
+        displayName: {type: string}
+        createdAt: {type: string, format: date-time}
+    MovieRequest:
+      type: object
+      required: [title, director, genre, releaseDate, durationMinutes]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 5000, nullable: true}
+        posterUrl: {type: string, maxLength: 2048, pattern: '^(?:https?://|/)\S+$', nullable: true}
+        director: {type: string, minLength: 1, maxLength: 200}
+        genre: {type: string, minLength: 1, maxLength: 100}
+        releaseDate: {type: string, format: date}
+        durationMinutes: {type: integer, minimum: 1}
+        castIds: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Uuid'}}
+        directorIds: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/Uuid'}}
+        genreIds: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/Uuid'}}
+    Movie:
+      type: object
+      required: [id, title, director, genre, releaseDate, durationMinutes]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        posterUrl: {type: string, nullable: true}
+        director: {type: string}
+        genre: {type: string}
+        releaseDate: {type: string, format: date}
+        durationMinutes: {type: integer}
+    MovieDetails:
+      allOf:
+        - {$ref: '#/components/schemas/Movie'}
+        - type: object
+          required: [credits, genres, externalRatings]
+          properties:
+            credits: {type: array, items: {$ref: '#/components/schemas/Credit'}}
+            genres: {type: array, items: {$ref: '#/components/schemas/NamedItem'}}
+            externalRatings: {type: array, items: {$ref: '#/components/schemas/ExternalRating'}}
+            personalRating: {type: integer, minimum: 1, maximum: 5, nullable: true}
+    Credit:
+      type: object
+      required: [personId, name, role]
+      properties:
+        personId: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        role: {type: string, enum: [CAST, DIRECTOR]}
+    NamedItem:
+      type: object
+      required: [id, name]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+    ExternalRatingRequest:
+      type: object
+      required: [score, scaleMax]
+      properties:
+        score: {type: number, format: double, minimum: 0}
+        scaleMax: {type: number, format: double, exclusiveMinimum: true, minimum: 0}
+        voteCount: {type: integer, format: int64, minimum: 0, nullable: true}
+    ExternalRating:
+      type: object
+      required: [source, score, scaleMax, fetchedAt]
+      properties:
+        source: {type: string}
+        score: {type: number, format: double}
+        scaleMax: {type: number, format: double}
+        voteCount: {type: integer, format: int64, nullable: true}
+        fetchedAt: {type: string, format: date-time}
+    GenreNameRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+    PersonNameRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+    RatingRequest:
+      type: object
+      required: [score]
+      properties:
+        score: {type: integer, minimum: 1, maximum: 5}
+    RatingResponse:
+      type: object
+      required: [movieId, score, createdAt, updatedAt]
+      properties:
+        movieId: {$ref: '#/components/schemas/Uuid'}
+        score: {type: integer, minimum: 1, maximum: 5}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    CollectionNameRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+    Collection:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    CollectionDetails:
+      type: object
+      required: [collection, movies]
+      properties:
+        collection: {$ref: '#/components/schemas/Collection'}
+        movies: {$ref: '#/components/schemas/MoviePage'}
+    ShareRequest:
+      type: object
+      properties:
+        expiresAt: {type: string, format: date-time, nullable: true, description: Must be in the future.}
+    Share:
+      type: object
+      required: [id, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time, nullable: true}
+        revokedAt: {type: string, format: date-time, nullable: true}
+    CreatedShare:
+      type: object
+      required: [id, token, path]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        token: {type: string, writeOnly: true}
+        path: {type: string, format: uri-reference}
+        expiresAt: {type: string, format: date-time, nullable: true}
+    SharedCollection:
+      type: object
+      required: [name, movies]
+      properties:
+        name: {type: string}
+        movies: {$ref: '#/components/schemas/MoviePage'}
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 1000}
+        limit: {type: integer, minimum: 1, maximum: 20, default: 10, nullable: true}
+    RecommendationRequest:
+      type: object
+      properties:
+        prompt: {type: string, maxLength: 1000, nullable: true}
+        limit: {type: integer, minimum: 1, maximum: 20, default: 10, nullable: true}
+    DiscoveryResponse:
+      type: object
+      required: [engine, fallbackUsed, message, results]
+      properties:
+        engine: {type: string}
+        fallbackUsed: {type: boolean}
+        message: {type: string}
+        results: {type: array, items: {$ref: '#/components/schemas/RankedMovie'}}
+    RankedMovie:
+      type: object
+      required: [movie, relevance, explanation]
+      properties:
+        movie: {$ref: '#/components/schemas/Movie'}
+        relevance: {type: number, format: double, minimum: 0, maximum: 1}
+        explanation: {type: string}
+    AnalyticsEventRequest:
+      type: object
+      required: [eventId, eventName, movieId, consentGranted]
+      properties:
+        eventId: {$ref: '#/components/schemas/Uuid'}
+        eventName:
+          type: string
+          enum: [SEARCH_RESULT_SELECTED, RECOMMENDATION_VIEWED, RECOMMENDATION_SELECTED]
+        movieId: {$ref: '#/components/schemas/Uuid'}
+        journeyId: {$ref: '#/components/schemas/Uuid'}
+        consentGranted: {type: boolean, enum: [true]}
+    AuditEvent:
+      type: object
+      additionalProperties: true
+      description: Audit event returned by the service.
+    PageMetadata:
+      type: object
+      required: [page, size, totalElements, totalPages]
+      properties:
+        page: {type: integer, minimum: 0}
+        size: {type: integer, minimum: 0}
+        totalElements: {type: integer, format: int64, minimum: 0}
+        totalPages: {type: integer, minimum: 0}
+    MoviePage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMetadata'}
+        - type: object
+          required: [content]
+          properties:
+            content: {type: array, items: {$ref: '#/components/schemas/Movie'}}
+    NamedItemPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMetadata'}
+        - type: object
+          required: [content]
+          properties:
+            content: {type: array, items: {$ref: '#/components/schemas/NamedItem'}}
+    RatingPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMetadata'}
+        - type: object
+          required: [content]
+          properties:
+            content: {type: array, items: {$ref: '#/components/schemas/RatingResponse'}}
+    CollectionPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMetadata'}
+        - type: object
+          required: [content]
+          properties:
+            content: {type: array, items: {$ref: '#/components/schemas/Collection'}}
+    AuditEventPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageMetadata'}
+        - type: object
+          required: [content]
+          properties:
+            content: {type: array, items: {$ref: '#/components/schemas/AuditEvent'}}
+    ApiError:
+      type: object
+      required: [type, title, status, detail, correlationId]
+      properties:
+        type: {type: string, format: uri-reference, example: 'about:blank'}
+        title: {type: string, example: Not Found}
+        status: {type: integer, example: 404}
+        detail: {type: string, example: Resource was not found.}
+        instance: {type: string, format: uri-reference, example: /api/movies/00000000-0000-0000-0000-000000000000}
+        correlationId: {type: string, format: uuid}
+        errors:
+          type: object
+          additionalProperties: {type: string}
+          description: Field validation messages when applicable.
